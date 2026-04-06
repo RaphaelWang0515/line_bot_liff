@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股市助理設定</title>
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  </head>
+  <body style="padding: 20px; font-family: sans-serif;">
+    <h2>自選股設定</h2>
+    <p id="msg" style="color: blue;">檢查連線中...</p>
+
+    <script>
+      const myLiffId = "2009701212-WO1Y1b37";
+      
+      liff.init({ liffId: myLiffId }).then(() => {
+        if (liff.isLoggedIn()) {
+          liff.getProfile().then(p => {
+            document.getElementById('msg').innerText = "連線成功！您好，" + p.displayName;
+            document.getElementById('msg').style.color = "green";
+          }).catch(e => {
+            document.getElementById('msg').innerText = "取得名稱失敗: " + e;
+            document.getElementById('msg').style.color = "red";
+          });
+        } else {
+          document.getElementById('msg').innerText = "喚起登入中...";
+          liff.login();
+        }
+      }).catch(e => {
+        document.getElementById('msg').innerText = "初始化失敗: " + e;
+        document.getElementById('msg').style.color = "red";
+      });
+    </script>
+  </body>
+</html>
