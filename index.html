@@ -1,74 +1,162 @@
 <!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>股市助理設定</title>
-    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-  </head>
-  <body style="padding: 20px; font-family: sans-serif; background-color: #f4f5f7;">
-    <h2 style="text-align: center;">自選股設定</h2>
-    <p id="msg" style="color: blue; text-align: center;">連線中...</p>
-
-    <div id="formSection" style="display: none; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-      <label for="stocksInput" style="font-weight: bold;">請輸入自選股代號 (用半形逗號分隔)：</label>
-      <input type="text" id="stocksInput" placeholder="例如: 2330, 0050, VOO" style="width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px;">
-      <button onclick="saveStocks()" style="padding: 12px 20px; background-color: #06C755; color: white; border: none; border-radius: 4px; width: 100%; font-size: 16px; font-weight: bold;">儲存設定</button>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>自選股管理</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 min-h-screen text-gray-800 font-sans">
+  <div id="app" class="max-w-md mx-auto pb-24">
+    <div class="bg-white shadow-sm p-4 sticky top-0 z-10">
+      <h1 class="text-xl font-bold text-center">自選股管理</h1>
+      <p class="text-center text-sm text-gray-500 mt-1">{{ statusMessage }}</p>
     </div>
 
-    <script>
-      const myLiffId = "2009701212-WO1Y1b37";
-      const gasUrl = "https://script.google.com/macros/s/AKfycbwHYrUAJJxhL3gNSRcIB1R6PY7LXIlGY6eBKF6WO8v7TXR71Hjv_CVrxl-3E7ild4k9/exec";
-      let currentUserId = "";
+    <div v-if="isReady" class="p-4 space-y-6">
+      <div v-for="(group, gIndex) in groups" :key="group.id" class="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div class="flex justify-between items-center mb-4">
+          <input v-model="group.name" class="font-bold text-lg bg-transparent border-b border-gray-300 focus:outline-none focus:border-blue-500 w-2/3" placeholder="群組名稱">
+          <button @click="removeGroup(gIndex)" class="text-red-500 text-sm hover:bg-red-50 px-2 py-1 rounded">刪除群組</button>
+        </div>
 
-      liff.init({ liffId: myLiffId }).then(() => {
-        if (liff.isLoggedIn()) {
-          liff.getProfile().then(p => {
-            currentUserId = p.userId;
-            document.getElementById('msg').innerText = "您好，" + p.displayName + "！";
-            document.getElementById('msg').style.color = "#333";
-            document.getElementById('formSection').style.display = "block";
-          });
-        } else {
-          liff.login();
-        }
-      });
+        <div class="flex flex-wrap gap-2 mb-4">
+          <div v-for="(stock, sIndex) in group.stocks" :key="sIndex" class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm flex items-center border border-blue-200">
+            {{ stock }}
+            <button @click="removeStock(gIndex, sIndex)" class="ml-2 text-blue-400 hover:text-blue-600 font-bold">×</button>
+          </div>
+        </div>
 
-      function saveStocks() {
-        const stocks = document.getElementById('stocksInput').value;
-        const btn = document.querySelector('button');
-        btn.innerText = "儲存中...";
-        btn.disabled = true;
+        <div class="flex gap-2">
+          <input v-model="group.newStock" @keyup.enter="addStock(gIndex)" type="text" placeholder="輸入代號 (如: 2330)" class="flex-1 bg-gray-50 border border-gray-300 text-sm rounded-lg block p-2 focus:ring-blue-500 focus:border-blue-500">
+          <button @click="addStock(gIndex)" class="bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg text-sm px-4 py-2">新增</button>
+        </div>
+      </div>
 
-        const payload = {
-          action: "updateStocks",
-          userId: currentUserId,
-          stocks: stocks
+      <button @click="addGroup" class="w-full py-3 border-2 border-dashed border-gray-300 text-gray-500 rounded-xl hover:bg-gray-50 font-medium">
+        + 建立新群組
+      </button>
+    </div>
+
+    <div v-if="isReady" class="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 max-w-md mx-auto">
+      <button @click="saveData" :disabled="isSaving" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl text-lg px-4 py-3 disabled:bg-gray-400">
+        {{ isSaving ? '儲存中...' : '儲存設定' }}
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    const liffId = "2009701212-WO1Y1b37";
+    const gasUrl = "https://script.google.com/macros/s/AKfycbwHYrUAJJxhL3gNSRcIB1R6PY7LXIlGY6eBKF6WO8v7TXR71Hjv_CVrxl-3E7ild4k9/exec";
+
+    createApp({
+      setup() {
+        const statusMessage = ref('初始化環境中...');
+        const isReady = ref(false);
+        const isSaving = ref(false);
+        const userId = ref('');
+        const groups = ref([]);
+
+        // 預設範本
+        const defaultGroups = [
+          { id: Date.now(), name: '台股核心', stocks: ['2330', '0050', '6208'], newStock: '' },
+          { id: Date.now() + 1, name: '高股息配置', stocks: ['0056', '00878', '00713'], newStock: '' },
+          { id: Date.now() + 2, name: '美股 ETF', stocks: ['VOO', 'QQQ', 'SOXX', 'DIA'], newStock: '' }
+        ];
+
+        const initApp = async () => {
+          try {
+            await liff.init({ liffId });
+            if (liff.isLoggedIn()) {
+              const profile = await liff.getProfile();
+              userId.value = profile.userId;
+              statusMessage.value = `讀取資料中...`;
+              fetchData();
+            } else {
+              liff.login();
+            }
+          } catch (err) {
+            statusMessage.value = 'LIFF 初始化失敗';
+          }
         };
 
-        // 使用 text/plain 傳遞資料以避開瀏覽器 CORS 阻擋
-        fetch(gasUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify(payload)
-        })
-        .then(response => response.json())
-        .then(data => {
-          if (data.status === "success") {
-            alert("儲存成功！");
-            liff.closeWindow(); // 儲存完成後自動關閉畫面
-          } else {
-            alert("儲存失敗，請確定您已在 LINE 傳送過訊息建立帳號。");
-            btn.innerText = "儲存設定";
-            btn.disabled = false;
+        const fetchData = async () => {
+          try {
+            const res = await fetch(gasUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain' },
+              body: JSON.stringify({ action: "loadStocks", userId: userId.value })
+            });
+            const result = await res.json();
+            
+            if (result.status === "success" && result.data && result.data !== "[]") {
+              const parsedData = JSON.parse(result.data);
+              groups.value = parsedData.map(g => ({ ...g, newStock: '' }));
+              statusMessage.value = '資料載入完成';
+            } else {
+              groups.value = JSON.parse(JSON.stringify(defaultGroups));
+              statusMessage.value = '已載入預設範本';
+            }
+            isReady.value = true;
+          } catch (error) {
+            statusMessage.value = '讀取失敗，請重新整理';
           }
-        })
-        .catch(error => {
-          alert("發生錯誤：" + error);
-          btn.innerText = "儲存設定";
-          btn.disabled = false;
-        });
+        };
+
+        const saveData = async () => {
+          isSaving.value = true;
+          statusMessage.value = '資料儲存中...';
+          
+          const dataToSave = groups.value.map(g => ({
+            id: g.id,
+            name: g.name,
+            stocks: g.stocks
+          }));
+
+          try {
+            const res = await fetch(gasUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain' },
+              body: JSON.stringify({
+                action: "updateStocks",
+                userId: userId.value,
+                data: JSON.stringify(dataToSave)
+              })
+            });
+            const result = await res.json();
+            if (result.status === "success") {
+              alert("設定已儲存");
+              liff.closeWindow();
+            } else {
+              alert("儲存失敗");
+            }
+          } catch (error) {
+            alert("網路錯誤");
+          } finally {
+            isSaving.value = false;
+            statusMessage.value = '資料載入完成';
+          }
+        };
+
+        const addGroup = () => groups.value.push({ id: Date.now(), name: '新群組', stocks: [], newStock: '' });
+        const removeGroup = (index) => groups.value.splice(index, 1);
+        const addStock = (index) => {
+          const stock = groups.value[index].newStock.trim().toUpperCase();
+          if (stock && !groups.value[index].stocks.includes(stock)) {
+            groups.value[index].stocks.push(stock);
+          }
+          groups.value[index].newStock = '';
+        };
+        const removeStock = (gIndex, sIndex) => groups.value[gIndex].stocks.splice(sIndex, 1);
+
+        onMounted(() => { initApp(); });
+
+        return { statusMessage, isReady, isSaving, groups, addGroup, removeGroup, addStock, removeStock, saveData };
       }
-    </script>
-  </body>
+    }).mount('#app');
+  </script>
+</body>
 </html>
