@@ -114,11 +114,12 @@
 
           const fetchStockDatabase = async () => {
             try {
-              const res = await fetch('https://openapi.twse.com.tw/v1/exchangeReport/STOCK_DAY_ALL');
-              const data = await res.json();
-              stockDatabase.value = data.map(item => ({ code: item.Code, name: item.Name }));
+              const res = await fetch('./stocks.json');
+              if (res.ok) {
+                stockDatabase.value = await res.json();
+              }
             } catch (e) {
-              console.error('取得台股代號失敗', e);
+              console.warn('靜態資料庫讀取異常');
             }
           };
 
