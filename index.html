@@ -27,6 +27,11 @@
       <p v-else class="text-sm text-gray-500">{{ statusMessage }}</p>
     </div>
 
+    <div v-if="!isReady" class="flex flex-col items-center justify-center p-12 space-y-4">
+      <div class="w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
+      <p class="text-gray-500 font-medium animate-pulse">資料同步中，請稍候...</p>
+    </div>
+
     <div v-if="isReady" class="p-4 space-y-6">
       <div v-for="(group, gIndex) in groups" :key="group.id" class="bg-white rounded-2xl shadow-md border border-gray-100 p-5 relative">
         <div class="flex justify-between items-center mb-5">
@@ -108,7 +113,7 @@
           const stockDatabase = ref([]);
 
           const defaultGroups = [
-            { id: Date.now(), name: '台股核心', stocks: ['2330', '0050', '6208'], newStock: '', showDropdown: false },
+            { id: Date.now(), name: '台股核心', stocks: ['2330', '0050', '006208'], newStock: '', showDropdown: false },
             { id: Date.now() + 1, name: '高股息配置', stocks: ['0056', '00878', '00713'], newStock: '', showDropdown: false }
           ];
 
@@ -131,8 +136,10 @@
                 userId.value = profile.userId;
                 userName.value = profile.displayName;
                 statusMessage.value = `讀取資料中...`;
-                await fetchStockDatabase();
-                fetchData();
+                
+                // 平行執行，不互相等待
+                fetchStockDatabase();
+                await fetchData();
               } else {
                 liff.login();
               }
@@ -208,18 +215,24 @@
             const input = groups.value[gIndex].newStock.trim().toUpperCase();
             if (!input) return;
 
-            const found = stockDatabase.value.find(s => s.code === input || s.name === input);
-            if (!found) {
-              alert(`找不到代號或名稱為「${input}」的標的，請重新確認。`);
-              return;
+            let targetCode = input;
+
+            // 只有在資料庫成功載入時才執行嚴格比對
+            if (stockDatabase.value.length > 0) {
+              const found = stockDatabase.value.find(s => s.code === input || s.name === input);
+              if (!found) {
+                alert(`找不到代號或名稱為「${input}」的標的，請重新確認。`);
+                return;
+              }
+              targetCode = found.code;
             }
 
-            const targetCode = found.code;
             if (!groups.value[gIndex].stocks.includes(targetCode)) {
               groups.value[gIndex].stocks.push(targetCode);
             } else {
               alert(`${targetCode} 已存在於此群組中。`);
             }
+            
             groups.value[gIndex].newStock = '';
             groups.value[gIndex].showDropdown = false;
           };
