@@ -6,30 +6,69 @@
     <title>股市助理設定</title>
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   </head>
-  <body style="padding: 20px; font-family: sans-serif;">
-    <h2>自選股設定</h2>
-    <p id="msg" style="color: blue;">檢查連線中...</p>
+  <body style="padding: 20px; font-family: sans-serif; background-color: #f4f5f7;">
+    <h2 style="text-align: center;">自選股設定</h2>
+    <p id="msg" style="color: blue; text-align: center;">連線中...</p>
+
+    <div id="formSection" style="display: none; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+      <label for="stocksInput" style="font-weight: bold;">請輸入自選股代號 (用半形逗號分隔)：</label>
+      <input type="text" id="stocksInput" placeholder="例如: 2330, 0050, VOO" style="width: 100%; padding: 12px; margin: 15px 0; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 16px;">
+      <button onclick="saveStocks()" style="padding: 12px 20px; background-color: #06C755; color: white; border: none; border-radius: 4px; width: 100%; font-size: 16px; font-weight: bold;">儲存設定</button>
+    </div>
 
     <script>
       const myLiffId = "2009701212-WO1Y1b37";
-      
+      const gasUrl = "https://script.google.com/macros/s/AKfycbwHYrUAJJxhL3gNSRcIB1R6PY7LXIlGY6eBKF6WO8v7TXR71Hjv_CVrxl-3E7ild4k9/exec";
+      let currentUserId = "";
+
       liff.init({ liffId: myLiffId }).then(() => {
         if (liff.isLoggedIn()) {
           liff.getProfile().then(p => {
-            document.getElementById('msg').innerText = "連線成功！您好，" + p.displayName;
-            document.getElementById('msg').style.color = "green";
-          }).catch(e => {
-            document.getElementById('msg').innerText = "取得名稱失敗: " + e;
-            document.getElementById('msg').style.color = "red";
+            currentUserId = p.userId;
+            document.getElementById('msg').innerText = "您好，" + p.displayName + "！";
+            document.getElementById('msg').style.color = "#333";
+            document.getElementById('formSection').style.display = "block";
           });
         } else {
-          document.getElementById('msg').innerText = "喚起登入中...";
           liff.login();
         }
-      }).catch(e => {
-        document.getElementById('msg').innerText = "初始化失敗: " + e;
-        document.getElementById('msg').style.color = "red";
       });
+
+      function saveStocks() {
+        const stocks = document.getElementById('stocksInput').value;
+        const btn = document.querySelector('button');
+        btn.innerText = "儲存中...";
+        btn.disabled = true;
+
+        const payload = {
+          action: "updateStocks",
+          userId: currentUserId,
+          stocks: stocks
+        };
+
+        // 使用 text/plain 傳遞資料以避開瀏覽器 CORS 阻擋
+        fetch(gasUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.status === "success") {
+            alert("儲存成功！");
+            liff.closeWindow(); // 儲存完成後自動關閉畫面
+          } else {
+            alert("儲存失敗，請確定您已在 LINE 傳送過訊息建立帳號。");
+            btn.innerText = "儲存設定";
+            btn.disabled = false;
+          }
+        })
+        .catch(error => {
+          alert("發生錯誤：" + error);
+          btn.innerText = "儲存設定";
+          btn.disabled = false;
+        });
+      }
     </script>
   </body>
 </html>
