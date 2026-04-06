@@ -62,9 +62,8 @@
 
         // 預設範本
         const defaultGroups = [
-          { id: Date.now(), name: '台股核心', stocks: ['2330', '0050', '6208'], newStock: '' },
-          { id: Date.now() + 1, name: '高股息配置', stocks: ['0056', '00878', '00713'], newStock: '' },
-          { id: Date.now() + 2, name: '美股 ETF', stocks: ['VOO', 'QQQ', 'SOXX', 'DIA'], newStock: '' }
+          { id: Date.now(), name: '台股核心', stocks: ['2330', '0050', '006208'], newStock: '' },
+          { id: Date.now() + 1, name: '高股息ETF配置', stocks: ['0056', '00878', '00713'], newStock: '' }
         ];
 
         const initApp = async () => {
@@ -155,6 +154,222 @@
         onMounted(() => { initApp(); });
 
         return { statusMessage, isReady, isSaving, groups, addGroup, removeGroup, addStock, removeStock, saveData };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
+
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>自選股管理</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* 隱藏捲軸但保持可捲動 */
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen text-gray-800 font-sans">
+  <div id="app" class="max-w-md mx-auto pb-24">
+    <div class="bg-white/80 backdrop-blur-md shadow-sm p-5 text-center sticky top-0 z-20">
+      <h1 class="text-2xl font-extrabold text-gray-800 mb-2">自選股管理</h1>
+      <p v-if="userName" class="text-sm text-gray-600 font-medium">
+        您好，<span class="text-blue-600">{{ userName }}</span>！<br>
+        您可以在這區域自由調整與分類您的投資標的。
+      </p>
+      <p v-else class="text-sm text-gray-500">{{ statusMessage }}</p>
+    </div>
+
+    <div v-if="isReady" class="p-4 space-y-6">
+      <div v-for="(group, gIndex) in groups" :key="group.id" class="bg-white rounded-2xl shadow-md border border-gray-100 p-5 relative">
+        <div class="flex justify-between items-center mb-5">
+          <input v-model="group.name" class="font-bold text-xl bg-transparent border-b-2 border-transparent focus:border-blue-500 focus:outline-none w-2/3 transition-colors pb-1" placeholder="請輸入群組名稱">
+          <button @click="removeGroup(gIndex)" class="text-red-400 hover:text-red-600 text-sm font-medium px-2 py-1 rounded bg-red-50 hover:bg-red-100 transition">刪除群組</button>
+        </div>
+
+        <div class="flex flex-wrap gap-2 mb-5">
+          <div v-for="(stock, sIndex) in group.stocks" :key="sIndex" class="bg-indigo-50 text-indigo-700 px-3 py-1.5 rounded-lg text-sm flex items-center shadow-sm font-medium border border-indigo-100">
+            {{ stock }}
+            <button @click="removeStock(gIndex, sIndex)" class="ml-2 text-indigo-400 hover:text-indigo-600 font-bold text-base leading-none">×</button>
+          </div>
+        </div>
+
+        <div class="relative">
+          <div class="flex gap-2">
+            <input 
+              v-model="group.newStock" 
+              @input="handleInput(gIndex)"
+              @focus="group.showDropdown = true"
+              @blur="hideDropdown(gIndex)"
+              @keyup.enter="addStock(gIndex)" 
+              type="text" 
+              placeholder="輸入代號或名稱 (如: 2330或台積電)" 
+              class="flex-1 bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl block p-3 focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition"
+            >
+            <button @click="addStock(gIndex)" class="bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl text-sm px-5 py-3 shadow-sm transition">新增</button>
+          </div>
+
+          <ul v-if="group.showDropdown && getFilteredStocks(group.newStock).length > 0" class="absolute z-30 w-full bg-white border border-gray-200 mt-1 rounded-xl shadow-lg max-h-48 overflow-y-auto no-scrollbar">
+            <li 
+              v-for="item in getFilteredStocks(group.newStock)" 
+              :key="item.code"
+              @mousedown.prevent="selectStock(gIndex, item)"
+              class="px-4 py-3 hover:bg-blue-50 cursor-pointer flex justify-between items-center border-b border-gray-50 last:border-0"
+            >
+              <span class="font-bold text-gray-800">{{ item.code }}</span>
+              <span class="text-sm text-gray-500">{{ item.name }}</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      <button @click="addGroup" class="w-full py-4 border-2 border-dashed border-blue-300 text-blue-600 rounded-2xl hover:bg-blue-50 hover:border-blue-400 font-bold transition flex justify-center items-center gap-2 bg-white/50 backdrop-blur-sm">
+        <span class="text-xl leading-none">+</span> 建立新群組
+      </button>
+    </div>
+
+    <div v-if="isReady" class="fixed bottom-0 left-0 right-0 p-4 bg-white/90 backdrop-blur border-t border-gray-200 max-w-md mx-auto z-20">
+      <button @click="saveData" :disabled="isSaving" class="w-full bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl text-lg px-4 py-4 shadow-md disabled:bg-gray-400 disabled:cursor-not-allowed transition transform hover:-translate-y-0.5">
+        {{ isSaving ? '資料儲存中...' : '確認並儲存設定' }}
+      </button>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    const liffId = "2009701212-WO1Y1b37";
+    const gasUrl = "https://script.google.com/macros/s/AKfycbwHYrUAJJxhL3gNSRcIB1R6PY7LXIlGY6eBKF6WO8v7TXR71Hjv_CVrxl-3E7ild4k9/exec";
+    // 模擬股市資料庫 (實務上可串接真實 API)
+    const stockDatabase = [
+      { code: '2330', name: '台積電' }, { code: '0050', name: '元大台灣50' },
+      { code: '006208', name: '富邦台50' }, { code: '0056', name: '元大高股息' },
+      { code: '00878', name: '國泰永續高股息' }, { code: '00713', name: '元大台灣高息低波' },
+      { code: '2317', name: '鴻海' }, { code: '2454', name: '聯發科' }
+    ];
+
+    createApp({
+      setup() {
+        const statusMessage = ref('初始化環境中...');
+        const userName = ref('');
+        const isReady = ref(false);
+        const isSaving = ref(false);
+        const userId = ref('');
+        const groups = ref([]);
+
+        const defaultGroups = [
+          { id: Date.now(), name: '台股核心', stocks: ['2330', '0050'], newStock: '', showDropdown: false },
+          { id: Date.now() + 1, name: '高股息配置', stocks: ['0056', '00878', '00713'], newStock: '', showDropdown: false }
+        ];
+
+        const initApp = async () => {
+          try {
+            await liff.init({ liffId });
+            if (liff.isLoggedIn()) {
+              const profile = await liff.getProfile();
+              userId.value = profile.userId;
+              userName.value = profile.displayName;
+              statusMessage.value = `讀取資料中...`;
+              fetchData();
+            } else {
+              liff.login();
+            }
+          } catch (err) {
+            statusMessage.value = 'LIFF 初始化失敗';
+          }
+        };
+
+        const fetchData = async () => {
+          try {
+            const res = await fetch(gasUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain' },
+              body: JSON.stringify({ action: "loadStocks", userId: userId.value })
+            });
+            const result = await res.json();
+            
+            if (result.status === "success" && result.data && result.data !== "[]") {
+              const parsedData = JSON.parse(result.data);
+              groups.value = parsedData.map(g => ({ ...g, newStock: '', showDropdown: false }));
+            } else {
+              groups.value = JSON.parse(JSON.stringify(defaultGroups));
+            }
+            isReady.value = true;
+          } catch (error) {
+            statusMessage.value = '讀取失敗，請檢查網路連線';
+          }
+        };
+
+        const saveData = async () => {
+          isSaving.value = true;
+          const dataToSave = groups.value.map(g => ({ id: g.id, name: g.name, stocks: g.stocks }));
+
+          try {
+            const res = await fetch(gasUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'text/plain' },
+              body: JSON.stringify({ action: "updateStocks", userId: userId.value, data: JSON.stringify(dataToSave) })
+            });
+            const result = await res.json();
+            if (result.status === "success") {
+              alert("設定已成功儲存！");
+              liff.closeWindow();
+            } else {
+              alert("儲存失敗，請稍後再試。");
+            }
+          } catch (error) {
+            alert("網路異常，請檢查連線。");
+          } finally {
+            isSaving.value = false;
+          }
+        };
+
+        const addGroup = () => groups.value.push({ id: Date.now(), name: '新自選群組', stocks: [], newStock: '', showDropdown: false });
+        const removeGroup = (index) => { if(confirm('確定要刪除此群組嗎？')) groups.value.splice(index, 1); };
+        const removeStock = (gIndex, sIndex) => groups.value[gIndex].stocks.splice(sIndex, 1);
+
+        const getFilteredStocks = (query) => {
+          if (!query) return [];
+          const q = query.trim().toUpperCase();
+          return stockDatabase.filter(s => s.code.includes(q) || s.name.includes(q)).slice(0, 5);
+        };
+
+        const handleInput = (gIndex) => { groups.value[gIndex].showDropdown = true; };
+        const hideDropdown = (gIndex) => { setTimeout(() => { groups.value[gIndex].showDropdown = false; }, 150); };
+
+        const selectStock = (gIndex, item) => {
+          groups.value[gIndex].newStock = item.code;
+          addStock(gIndex);
+        };
+
+        const addStock = (gIndex) => {
+          const input = groups.value[gIndex].newStock.trim().toUpperCase();
+          if (!input) return;
+
+          const found = stockDatabase.find(s => s.code === input || s.name === input);
+          if (!found) {
+            alert(`找不到代號或名稱為「${input}」的標的，請重新確認。`);
+            return;
+          }
+
+          const targetCode = found.code;
+          if (!groups.value[gIndex].stocks.includes(targetCode)) {
+            groups.value[gIndex].stocks.push(targetCode);
+          } else {
+            alert(`${targetCode} 已存在於此群組中。`);
+          }
+          groups.value[gIndex].newStock = '';
+          groups.value[gIndex].showDropdown = false;
+        };
+
+        onMounted(() => { initApp(); });
+
+        return { statusMessage, userName, isReady, isSaving, groups, addGroup, removeGroup, addStock, removeStock, saveData, getFilteredStocks, handleInput, hideDropdown, selectStock };
       }
     }).mount('#app');
   </script>
